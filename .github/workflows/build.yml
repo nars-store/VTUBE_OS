@@ -15,10 +15,15 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y live-build debootstrap xorriso squashfs-tools
+          sudo apt-get install -y debootstrap xorriso squashfs-tools cpio wget
+          wget -O /tmp/live-build.deb \
+            https://deb.debian.org/debian/pool/main/l/live-build/live-build_20250505+deb13u1_all.deb
+          sudo apt-get install -y /tmp/live-build.deb
+          lb --version
 
       - name: Build ISO
         run: |
