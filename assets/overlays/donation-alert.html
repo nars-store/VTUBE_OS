@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="id"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VTUBE Donation Alert</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:transparent;color:#fff;font-family:system-ui,sans-serif}
+#alert{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-20px);opacity:0;
+background:linear-gradient(120deg,#18152b,#202943);border:1px solid #9b7bff;border-radius:18px;
+padding:18px 26px;min-width:330px;text-align:center;box-shadow:0 12px 44px #0008;transition:.35s}
+#alert.show{opacity:1;transform:translateX(-50%) translateY(0)}small{color:#64e6f2;font-weight:800;letter-spacing:.16em}
+h2{margin:7px 0 3px;font-size:26px}p{margin:0;color:#c9cce0}
+</style><div id="alert"><small>VTUBE DONATION</small><h2 id="who">Supporter</h2><p id="amount">Rp 5.000 — makasih!</p></div>
+<script>
+/* Preview asset only. A future local event bridge will send verified events here. */
+window.vtubeDonationPreview=(who,amount)=>{document.getElementById('who').textContent=who;
+document.getElementById('amount').textContent='Rp '+Number(amount).toLocaleString('id-ID')+' — makasih!';
+const el=document.getElementById('alert');el.classList.add('show');setTimeout(()=>el.classList.remove('show'),6000)};
+</script></html>
