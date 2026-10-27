@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=VTUBE Live Studio
+Comment=Open scenes and prepare a VTUBE OS live session
+Exec=python3 /opt/vtube-os/app.py --page "Live Studio"
+Icon=applications-multimedia
+Terminal=false
+Categories=AudioVideo;Video;
+StartupNotify=true

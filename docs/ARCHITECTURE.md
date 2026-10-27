@@ -1,11 +1,31 @@
 # VTUBE OS architecture
 
-- **Control Center (`app.py`)**: navigation, scene layout mockup, profile state, device discovery and launch actions.
-- **Device abstraction (current)**: Linux V4L2 `/dev/video*`; PipeWire/PulseAudio via `pactl`; camera preview via FFmpeg/ffplay.
-- **VTUBE Connect Android**: Android Studio project in `vtube-connect/android`. CameraX preview feeds a local token-gated MJPEG endpoint; AudioRecord exposes raw PCM. Local LAN only for this alpha.
-- **Media backend (planned)**: GStreamer compositor for camera/game/avatar/overlay, FFmpeg encode/mux, virtual camera/audio routing where supported.
-- **Avatar backend (planned)**: VRM/Live2D compatibility layer, face/hand tracking and expression mapper.
-- **Platform adapters (planned)**: provider-specific official APIs, OAuth/token storage and webhooks. No credentials stored in source code.
-- **System layer**: Debian Live + XFCE, PipeWire, udev/V4L2 and NetworkManager.
+- **VTUBE desktop app (`app.py`)**: Control Center with Live Studio, Avatar
+  Studio, Audio Studio, Donation Center and Connect Hub pages. Debian Live
+  installs desktop launchers that open the shared app at a selected page.
+- **Live Studio**: Starts and stops an internal FFmpeg process. It accepts a
+  single video input (phone MJPEG, V4L2 or X11), one audio input (phone PCM,
+  PulseAudio default source or silence), a generated transparent PNG overlay,
+  and RTMP/RTMPS output. The live scene canvas remains a UI mockup and does not
+  control the encoded composition.
+- **Avatar Studio**: Original static 2D SVG templates, editor preview and
+  local character JSON under `~/.config/vtube-os/characters/`. A generated
+  SVG combines the selected avatar with the manually configured donation goal,
+  URL and optional QR image; CairoSVG renders it for FFmpeg.
+- **Settings and credentials**: Stream settings live in
+  `~/.config/vtube-os/stream-settings.json` with owner-only permissions.
+  Stream keys are not encrypted. Logs are written to the same user's
+  configuration directory.
+- **VTUBE Connect Android**: Android companion in `vtube-connect/android`.
+  CameraX, user-approved MediaProjection and AudioRecord serve local
+  token-gated MJPEG/PCM endpoints. VTUBE Live Studio consumes those endpoints
+  directly; no separate broadcasting client is needed.
+- **OS image**: Debian Live + XFCE, PipeWire, FFmpeg, CairoSVG, V4L2 tools and
+  NetworkManager. ISO build and runtime have not yet been verified.
+- **Not implemented**: face/hand tracking, avatar animation/lip-sync,
+  multi-source scene composition, recording, automatic donation events,
+  platform chat, secure remote relay and production installer/update system.
 
-Security boundary: current Android transport is prototype-only. Do not forward its port to the public internet. Production release needs TLS/authentication hardening, rate limiting, explicit consent, secure token storage and threat review.
+Security boundary: Android streaming is a local-network prototype. Do not
+forward port 8765 or use it on an untrusted network. Production use requires
+stronger authentication, encrypted transport, firewall policy and review.

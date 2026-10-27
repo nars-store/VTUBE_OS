@@ -32,6 +32,7 @@ class PhoneMediaServer(private val token: String) {
                     "/status" -> { val body="{\"status\":\"ok\",\"command\":\"$latestCommand\"}".toByteArray(); write(output,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"); output.write(body); output.flush() }
                     "/control" -> { latestCommand=query["command"] ?: "none"; val body="OK $latestCommand".toByteArray(); write(output,"HTTP/1.1 200 OK\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"); output.write(body); output.flush() }
                     "/camera.mjpeg" -> { write(output,"HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=frame\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n"); while(running.get() && !s.isClosed) { val frame=latestJpeg; if(frame!=null) { output.write("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.size}\r\n\r\n".toByteArray()); output.write(frame); output.write("\r\n".toByteArray()); output.flush() }; Thread.sleep(40) } }
+                    "/screen.mjpeg" -> { write(output,"HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=frame\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n"); while(running.get() && !s.isClosed) { val frame=latestScreenJpeg; if(frame!=null) { output.write("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.size}\r\n\r\n".toByteArray()); output.write(frame); output.write("\r\n".toByteArray()); output.flush() }; Thread.sleep(80) } }
                     "/audio.pcm" -> streamAudio(output)
                     else -> { val body="VTUBE Connect local prototype".toByteArray(); write(output,"HTTP/1.1 200 OK\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"); output.write(body); output.flush() }
                 }
@@ -46,5 +47,8 @@ class PhoneMediaServer(private val token: String) {
     }
     private fun readLine(input: BufferedInputStream): String? { val b=java.io.ByteArrayOutputStream(); while(true) { val c=input.read(); if(c<0) return if(b.size()>0) b.toString(Charsets.UTF_8.name()) else null; if(c==10) break; if(c!=13) b.write(c); if(b.size()>8192) return null }; return b.toString(Charsets.UTF_8.name()) }
     private fun write(out: BufferedOutputStream, text:String) { out.write(text.toByteArray()); out.flush() }
-    companion object { @Volatile var latestJpeg: ByteArray? = null }
+    companion object {
+        @Volatile var latestJpeg: ByteArray? = null
+        @Volatile var latestScreenJpeg: ByteArray? = null
+    }
 }

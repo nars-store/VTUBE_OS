@@ -1,21 +1,37 @@
 # VTUBE Connect Android (Alpha source)
 
-This is the native Android companion source project included with VTUBE OS. It is not a prebuilt APK. Build it using Android Studio with JDK 17, Android SDK 35, and network access for Gradle dependencies.
+VTUBE Connect is the Android companion source project included with VTUBE OS.
+GitHub Actions can build a debug APK; Android Studio with JDK 17 and Android
+SDK 35 is an optional local development route.
 
-## Current prototype
-- Native Android UI and CameraX front-camera preview.
-- Local-network MJPEG endpoint (`/camera.mjpeg?token=...`).
-- Microphone PCM endpoint (`/audio.pcm?token=...`) at 16 kHz mono s16le. In Linux use `ffplay -f s16le -ar 16000 -ac 1 http://PHONE_IP:8765/audio.pcm?token=CODE` (shells may require quoting URL).
-- Token-gated local status/control endpoint.
-- Stop button unbinds camera and stops local server/audio.
+## Prototype capabilities
+- Native Android UI and CameraX camera capture.
+- Local-network MJPEG camera endpoint (`/camera.mjpeg?token=...`).
+- Explicit Android MediaProjection consent and foreground service for the
+  phone screen endpoint (`/screen.mjpeg?token=...`).
+- Microphone PCM endpoint (`/audio.pcm?token=...`) at 16 kHz mono s16le.
+- Token-gated local status/control endpoint. Stop ends the camera, screen
+  sharing, server and microphone stream.
 
-## Pair with VTUBE OS
-1. Connect phone and Linux laptop to the same trusted Wi-Fi network.
-2. Build/install the Android app, open it, grant Camera and Microphone permission, tap Start.
-3. Copy the URL shown in the app into VTUBE OS → VTUBE Connect Hub → Open stream. For camera preview use `http://PHONE_IP:8765/camera.mjpeg?token=CODE`.
-4. For audio, in a terminal run: `ffplay -f s16le -ar 16000 -ac 1 'http://PHONE_IP:8765/audio.pcm?token=CODE'`. This is a raw PCM test stream; integration into the OS mixer is still required.
+## Use with VTUBE OS
+1. Connect the phone and laptop to the same trusted local network.
+2. Build/install the debug APK from GitHub Actions, open VTUBE Connect, grant
+   the requested permissions and tap **Start**.
+3. For phone gameplay, tap **Share phone screen** and approve Android's
+   MediaProjection system prompt.
+4. Enter the phone IP and pair code in VTUBE OS → **VTUBE Connect Hub**. Check
+   the connection or use **Pakai sumber HP di Live Studio**.
+5. In **VTUBE Live Studio**, select the phone screen or camera and phone mic,
+   configure the platform's RTMP/RTMPS destination, and start the built-in
+   VTUBE live engine.
 
-## Important limits and safety
-- Alpha, unreviewed prototype; do not expose port 8765 to the public internet or use on untrusted Wi-Fi. The code uses a short pairing token and does not yet provide production-grade TLS/encryption, certificate pinning, relay, or robust multi-client handling.
-- MJPEG frame conversion is device-dependent and must be tested on real Android phones. Some phone/network configurations may block local traffic.
-- Android screen/game capture requires MediaProjection permission flow and is not implemented in this source version. Face tracking, VRM/Live2D, background service, reconnection, and production remote control remain roadmap items.
+## Limits and safety
+- This is an experimental prototype; do not expose port 8765 to the public
+  internet or use it on untrusted Wi-Fi. Transport is not production-grade
+  encrypted/authenticated.
+- MJPEG conversion, Android background behavior, local network access and
+  performance vary by device and must be tested on a real phone.
+- Screen sharing requires explicit system consent and may show protected
+  content as blank.
+- Face tracking, avatar motion, USB transport, secure internet relay,
+  reconnection and production remote control are not implemented.

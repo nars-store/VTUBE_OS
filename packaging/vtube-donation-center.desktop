@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=VTUBE Donation Center
+Comment=Manage donation goal and test alerts
+Exec=python3 /opt/vtube-os/app.py --page "Donation Center"
+Icon=emblem-favorite
+Terminal=false
+Categories=AudioVideo;Network;
+StartupNotify=true

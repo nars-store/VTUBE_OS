@@ -38,11 +38,12 @@ lb config \
   --apt-recommends true \
   --apt-options "--yes"
 
-mkdir -p config/package-lists config/includes.chroot/opt/vtube-os config/includes.chroot/etc/skel/.config/autostart
+mkdir -p config/package-lists config/includes.chroot/opt/vtube-os config/includes.chroot/etc/skel/.config/autostart config/includes.chroot/usr/share/applications
 cp "$ROOT/config/package-lists/vtube.list.chroot" config/package-lists/vtube.list.chroot
-cp "$ROOT/app.py" "$ROOT/run.sh" "$ROOT/README.md" config/includes.chroot/opt/vtube-os/
+cp "$ROOT/app.py" "$ROOT/vtube_avatar.py" "$ROOT/vtube_live.py" "$ROOT/run.sh" "$ROOT/README.md" config/includes.chroot/opt/vtube-os/
 cp -a "$ROOT/packaging" config/includes.chroot/opt/vtube-os/
 cp -a "$ROOT/docs" "$ROOT/vtube-connect" "$ROOT/assets" config/includes.chroot/opt/vtube-os/
+cp "$ROOT"/packaging/*.desktop config/includes.chroot/usr/share/applications/
 chmod 0755 config/includes.chroot/opt/vtube-os/app.py config/includes.chroot/opt/vtube-os/run.sh
 
 cat > config/includes.chroot/etc/skel/.config/autostart/vtube-control-center.desktop <<'EOF'

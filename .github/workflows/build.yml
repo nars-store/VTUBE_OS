@@ -12,30 +12,30 @@ jobs:
   build-os:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
+      - name: Check source syntax
+        run: |
+          python3 -c "import ast, pathlib; [ast.parse(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('app.py', 'vtube_avatar.py', 'vtube_live.py')]"
+          bash -n tools/build-iso.sh
+          python3 -m unittest discover -s tests -v
 
-
-      - name: Install dependencies
+      - name: Install Debian Live build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y debootstrap xorriso squashfs-tools cpio wget debian-archive-keyring
-          test -s /usr/share/keyrings/debian-archive-keyring.gpg
-          wget -O /tmp/live-build.deb \
-            https://deb.debian.org/debian/pool/main/l/live-build/live-build_20250505+deb13u1_all.deb
+          wget -O /tmp/live-build.deb https://deb.debian.org/debian/pool/main/l/live-build/live-build_20250505+deb13u1_all.deb
           sudo apt-get install -y /tmp/live-build.deb
           lb --version
 
-      - name: Build ISO
-        run: |
-          chmod +x tools/build-iso.sh
-          sudo bash tools/build-iso.sh
+      - name: Build VTUBE OS live ISO
+        run: sudo bash tools/build-iso.sh
 
-      - name: Upload ISO
+      - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vtube-os-iso
+          name: VTUBE-OS-ISO
           path: |
             build-output/*.iso
             build-output/SHA256SUMS
+          if-no-files-found: error

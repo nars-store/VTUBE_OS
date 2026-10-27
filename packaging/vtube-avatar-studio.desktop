@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=VTUBE Avatar Studio
+Comment=Manage VTUBE avatar presets
+Exec=python3 /opt/vtube-os/app.py --page "Avatar Studio"
+Icon=applications-graphics
+Terminal=false
+Categories=AudioVideo;Graphics;
+StartupNotify=true

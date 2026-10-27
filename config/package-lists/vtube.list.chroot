@@ -7,8 +7,8 @@ python3-venv
 pipewire
 pipewire-pulse
 wireplumber
-pavucontrol
 ffmpeg
+python3-cairosvg
 gstreamer1.0-tools
 gstreamer1.0-pipewire
 gstreamer1.0-plugins-base
@@ -27,4 +27,3 @@ git
 python3-requests
 python3-opencv
 gstreamer1.0-libav
-obs-studio

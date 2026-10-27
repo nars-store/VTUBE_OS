@@ -1,23 +1,35 @@
-# VTUBE OS Roadmap (Alpha 0.2)
+# VTUBE OS Roadmap
 
-## Included now
-- Python/Tkinter branded control center, scene placeholder canvas, local profiles, avatar color/preset UI, donation goal + simulated alert.
-- Linux camera discovery (`/dev/video*`) and ffplay preview, audio source/sink enumeration and default-device selection via PipeWire/PulseAudio tools.
-- Input-mode selector for webcam, capture card, phone/IP camera, external mic and mobile-gaming workflows.
-- Native Android companion source project in `vtube-connect/android`, including CameraX preview and token-gated local MJPEG/raw-PCM endpoints.
-- Debian Live ISO build script, package list, desktop autostart. ISO must be built on a Debian/Ubuntu host and tested; no ISO binary is prebuilt in this archive.
+## Included as prototypes
+- Branded Control Center with Live Studio, Avatar Studio, Audio Studio,
+  Donation Center and VTUBE Connect Hub.
+- Static 2D Luna/Nova/Kiro illustration editor with visual preview, color and
+  style customization, local save/load and SVG export.
+- Internal FFmpeg RTMP/RTMPS pipeline with one video source, one audio source
+  and a transparent avatar/donation overlay.
+- Android companion source for camera, consent-based screen sharing and phone
+  microphone streams over a trusted local network.
+- Debian Live image definition and GitHub Actions workflows for ISO and debug
+  APK artifacts.
 
-## Not yet production-ready
-- The live canvas is not a real-time video compositor; no integrated encoder/record/stream pipeline yet.
-- VRM/Live2D rendering, face/hand tracking, actual avatar assets and expression mapping.
-- Android screen/game capture (MediaProjection), reliable USB transport, encrypted internet relay, automatic reconnect, full remote control and hardened pairing.
-- Per-source audio mixer/effects/sync and seamless phone mic injection into the OS mixer.
-- Real Saweria payment/webhook integration and supported chat integrations for YouTube/Twitch/TikTok. Platform APIs, authentication, permissions and current policies must be verified before implementation. Donation alert is simulation only.
-- Installer validation, secure updates, backup/restore, diagnostics, plugin sandbox and privacy review.
+## Not yet implemented or validated
+- Build the OS ISO in GitHub Actions, inspect its artifact and boot it in a VM
+  before attempting hardware installation.
+- Build the Android debug APK in GitHub Actions, install it and test screen,
+  camera and audio capture on the target phone.
+- Validate RTMP/RTMPS output with each target platform, along with device
+  compatibility, reconnection, CPU usage, network behavior and A/V sync.
+- Use the Live Studio canvas as the actual multi-source compositor; currently
+  only the selected source and generated avatar/donation overlay are encoded.
+- Add rigged/animated avatar support (Live2D/VRM), face/hand tracking,
+  expression mapping and lip-sync.
+- Add recording, multi-source scene control, per-source audio mixer/effects
+  and synchronization.
+- Add real donation events only through authorized/official interfaces;
+  Saweria goal/link/QR are currently manually displayed, not payment processing.
+- Harden Android pairing, encrypted transport, updates, installer/recovery,
+  backup, privacy and security before production use.
 
-## Next milestone order
-1. Test and harden Android local camera/audio streams on physical devices; integrate into GStreamer/FFmpeg and source selection.
-2. Replace canvas mockup with a GStreamer compositor and FFmpeg recording/streaming backend.
-3. Add supported avatar renderer and tracking backend.
-4. Implement platform integrations through official/authorized APIs and donation provider's supported webhook/API.
-5. Harden pairing, privacy indicators, firewall defaults, updates, installer and recovery.
+Use the GitHub Actions workflows for builds rather than building the ISO on a
+low-powered local laptop. This repository does not yet contain a tested ISO or
+APK.

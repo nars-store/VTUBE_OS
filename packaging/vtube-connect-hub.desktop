@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=VTUBE Connect Hub
+Comment=Connect cameras, microphones and phone sources
+Exec=python3 /opt/vtube-os/app.py --page "VTUBE Connect"
+Icon=network-workgroup
+Terminal=false
+Categories=AudioVideo;Network;
+StartupNotify=true

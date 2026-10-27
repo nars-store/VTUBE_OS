@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=VTUBE Audio Studio
+Comment=Choose audio devices for VTUBE OS
+Exec=python3 /opt/vtube-os/app.py --page "Audio Studio"
+Icon=audio-card
+Terminal=false
+Categories=AudioVideo;Audio;
+StartupNotify=true
