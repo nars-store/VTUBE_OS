@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+from vtube_runtime import VTUBERuntime
+from vtube_mobile_bridge import MobileBridgeManager
+
+
+class VTUBEIntegratedRuntime:
+    """Integrated runtime containing desktop OS, Android bridge, session, and live pipeline."""
+
+    def __init__(self):
+        self.runtime = VTUBERuntime()
+        self.mobile_manager = MobileBridgeManager()
+
+    def register_android_phone(self, host: str, token: str, device_id: Optional[str] = None, name: str = "android-phone") -> Dict[str, Any]:
+        bridge = self.mobile_manager.pair_phone(host, token, device_id=device_id, name=name)
+        self.runtime.phone_registry.register(bridge, name=name)
+        return bridge.telemetry()
+
+    def bootstrap(self) -> Dict[str, Any]:
+        self.runtime.register_phone("192.168.1.42", "ABC123", "phone-primary")
+        self.runtime.register_avatar("Luna", model_type="live2d", model_path="models/Luna.model3.json", avatar_name="Luna")
+        self.runtime.register_scene_source("camera", "webcam", "Camera 1", x=0, y=0, width=1280, height=720, z_index=1)
+        self.runtime.register_scene_source("avatar", "avatar", "Luna", x=1100, y=110, width=420, height=620, z_index=10)
+        self.runtime.register_audio_device("Laptop Mic", "input")
+        self.runtime.bind_audio_track("Laptop Mic", volume=0.9, source_type="microphone")
+        self.runtime.register_stream_platform("youtube", "youtube", "rtmp://a.rtmp.youtube.com/live2", "demo-stream-key", channel_name="vtube-demo")
+        return self.runtime.snapshot()
+
+
+if __name__ == "__main__":
+    runtime = VTUBEIntegratedRuntime()
+    runtime.register_android_phone("192.168.1.42", "abc123", device_id="phone-primary", name="Pixel 9")
+    print(runtime.bootstrap())
