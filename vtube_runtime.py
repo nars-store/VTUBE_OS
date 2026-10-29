@@ -1,158 +1,144 @@
-"""VTUBE runtime model layer for Live2D/VRM-based avatar workflows.
-
-This module replaces the older SVG-only avatar idea with a real model-management
-layer suitable for future Live2D or VRM avatar runtime integration.
-
-The goal is to provide a clean abstraction for:
-- model registry and profile management
-- runtime loading and switching
-- expression/pose state management
-- compatibility with future real VTuber engines
-
-This is not the full runtime implementation yet, but it is the foundation that
-replaces the legacy static SVG avatar export flow.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Dict, List, Optional
-import json
 
-
-SUPPORTED_MODEL_TYPES = ("live2d", "vrm", "legacy_svg")
+from vtube_auth_manager import AuthManager
+from vtube_audio_device import AudioDevice, AudioDeviceManager
+from vtube_audio_mixer import AudioMixer, MixerTrack
+from vtube_audio_monitor import AudioMonitor
+from vtube_avatar_model import AvatarModel, AvatarModelRegistry
+from vtube_avatar_runtime import AvatarRuntime
+from vtube_device_manager import DeviceManager
+from vtube_donation_connector import DonationConnector
+from vtube_encryption import SimpleCipher
+from vtube_expression_mapper import ExpressionMapper
+from vtube_face_tracking import FaceMetrics, FaceTracker
+from vtube_live_compositor import LiveCompositor
+from vtube_motion_tracker import MotionTracker
+from vtube_noise_reduction import NoiseReductionEngine
+from vtube_overlay_platform import OverlayPlatformManager
+from vtube_permission_manager import PermissionManager
+from vtube_phone_bridge import PhoneBridge, PhoneDeviceRegistry
+from vtube_platform_registry import PlatformRegistry
+from vtube_scene import Scene
+from vtube_scene_source import SceneSource
+from vtube_stream_platform import StreamPlatformManager
+from vtube_stream_source import SourceCatalog
 
 
 @dataclass
-class VTubeModelSpec:
-    """Descriptor for a VTuber model file and its runtime metadata."""
-
-    name: str
-    model_type: str
-    model_path: str
-    avatar_name: str = ""
-    enabled: bool = True
-    tracking: Dict[str, Any] = field(default_factory=dict)
-    expression_map: Dict[str, Any] = field(default_factory=dict)
-
-    def validate(self) -> None:
-        if self.model_type not in SUPPORTED_MODEL_TYPES:
-            raise ValueError(f"Unsupported model type: {self.model_type}")
-        path = Path(self.model_path)
-        if not path.exists() and self.model_type != "legacy_svg":
-            raise FileNotFoundError(f"Model file does not exist: {self.model_path}")
+class VTUBERuntimeConfig:
+    default_scene_name: str = "vtube-main-scene"
+    default_avatar_name: str = "Luna"
+    default_platform: str = "youtube"
+    cipher_secret: str = "vtube-os-secret"
+    default_resolution: Dict[str, int] = field(default_factory=lambda: {"width": 1920, "height": 1080})
 
 
-class VTubeModelManager:
-    """Registry for Live2D/VRM models used by the VTUBE OS runtime."""
+class VTUBERuntime:
+    """Main orchestration layer for VTUBE OS modules across groups A-H."""
 
-    def __init__(self, model_dir: str | Path | None = None):
-        self.model_dir = Path(model_dir) if model_dir else Path("models")
-        self.model_dir.mkdir(parents=True, exist_ok=True)
-        self._models: Dict[str, VTubeModelSpec] = {}
+    def __init__(self, config: Optional[VTUBERuntimeConfig] = None):
+        self.config = config or VTUBERuntimeConfig()
 
-    def register(self, model: VTubeModelSpec) -> None:
-        model.validate()
-        self._models[model.name] = model
+        self.phone_registry = PhoneDeviceRegistry()
+        self.source_catalog = SourceCatalog()
+        self.device_manager = DeviceManager()
+        self.avatar_registry = AvatarModelRegistry()
+        self.face_tracker = FaceTracker(tracker_name="vtube-runtime")
+        self.avatar_runtime = AvatarRuntime(self.avatar_registry)
+        self.audio_devices = AudioDeviceManager()
+        self.audio_mixer = AudioMixer()
+        self.noise_engine = NoiseReductionEngine()
+        self.audio_monitor = AudioMonitor()
+        self.scene = Scene(self.config.default_scene_name, width=self.config.default_resolution["width"], height=self.config.default_resolution["height"])
+        self.live_compositor = LiveCompositor(self.scene)
+        self.platform_registry = PlatformRegistry()
+        self.stream_manager = StreamPlatformManager()
+        self.donation_connector = DonationConnector()
+        self.overlay_manager = OverlayPlatformManager()
+        self.auth_manager = AuthManager()
+        self.permission_manager = PermissionManager()
+        self.cipher = SimpleCipher(self.config.cipher_secret)
 
-    def load(self, name: str) -> VTubeModelSpec:
-        if name not in self._models:
-            raise KeyError(f"Model not registered: {name}")
-        return self._models[name]
+    def register_phone(self, host: str, token: str, name: Optional[str] = None) -> PhoneBridge:
+        bridge = PhoneBridge(host, token)
+        self.phone_registry.register(bridge, name=name)
+        self.device_manager.register(name or bridge.device.host, "phone", True, {"host": host})
+        return bridge
 
-    def list_models(self) -> List[str]:
-        return sorted(self._models.keys())
+    def register_avatar(self, name: str, model_type: str = "live2d", model_path: str = "", avatar_name: str = "") -> AvatarModel:
+        model = AvatarModel(name=name, model_type=model_type, model_path=model_path, avatar_name=avatar_name or name)
+        self.avatar_registry.register(model)
+        self.avatar_runtime.load_model(name)
+        return model
 
-    def save_manifest(self, path: str | Path) -> None:
-        manifest_path = Path(path)
-        manifest_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            name: {
-                "model_type": spec.model_type,
-                "model_path": spec.model_path,
-                "avatar_name": spec.avatar_name,
-                "enabled": spec.enabled,
-                "tracking": spec.tracking,
-                "expression_map": spec.expression_map,
-            }
-            for name, spec in self._models.items()
-        }
-        manifest_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    def register_scene_source(self, source_id: str, kind: str, name: str, source_url: str = "", x: int = 0, y: int = 0, width: int = 640, height: int = 360, opacity: float = 1.0, z_index: int = 0) -> SceneSource:
+        source = SceneSource(source_id, kind, name, source_url=source_url, x=x, y=y, width=width, height=height, opacity=opacity, z_index=z_index)
+        self.scene.add_source(source, x=x, y=y, width=width, height=height, opacity=opacity)
+        return source
 
-    def load_manifest(self, path: str | Path) -> None:
-        manifest_path = Path(path)
-        if not manifest_path.exists():
-            return
-        data = json.loads(manifest_path.read_text(encoding="utf-8"))
-        for name, payload in data.items():
-            self.register(
-                VTubeModelSpec(
-                    name=name,
-                    model_type=payload.get("model_type", "live2d"),
-                    model_path=payload.get("model_path", ""),
-                    avatar_name=payload.get("avatar_name", name),
-                    enabled=payload.get("enabled", True),
-                    tracking=payload.get("tracking", {}),
-                    expression_map=payload.get("expression_map", {}),
-                )
-            )
+    def register_audio_device(self, name: str, kind: str, sample_rate: int = 48000, channels: int = 2) -> AudioDevice:
+        device = AudioDevice(name=name, kind=kind, sample_rate=sample_rate, channels=channels)
+        self.audio_devices.register(device)
+        return device
 
+    def register_stream_platform(self, name: str, kind: str, endpoint: str, stream_key: str, channel_name: str = "") -> Dict[str, Any]:
+        from vtube_platform_registry import PlatformConfig
 
-class VTubeRuntimeAdapter:
-    """Runtime abstraction that future Live2D/VRM backends can implement."""
+        config = PlatformConfig(name=name, kind=kind, endpoint=endpoint, stream_key=stream_key, channel_name=channel_name)
+        self.platform_registry.register(config)
+        self.stream_manager.register(name, stream_key, endpoint, bitrate_kbps=2500, fps=30)
+        return config.as_dict()
 
-    def __init__(self, model: VTubeModelSpec):
-        self.model = model
+    def bind_audio_track(self, name: str, volume: float = 1.0, source_type: str = "microphone") -> MixerTrack:
+        track = MixerTrack(name=name, volume=volume, source_type=source_type)
+        self.audio_mixer.add_track(track)
+        return track
 
-    def set_expression(self, expression: str, value: float) -> None:
-        self.model.expression_map[expression] = value
+    def process_face(self, frame_data: Optional[Dict[str, Any]] = None, source: str = "camera") -> Dict[str, float]:
+        metrics = self.face_tracker.process_frame(frame_data=frame_data, source=source)
+        return self.avatar_runtime.update_from_tracking(metrics)
 
-    def set_pose(self, pose: Dict[str, Any]) -> None:
-        self.model.tracking.update(pose)
+    def process_audio(self, input_db: float, track_name: str = "mic") -> float:
+        processed = self.noise_engine.process(input_db)
+        self.audio_monitor.update(track_name, peak_db=processed, rms_db=processed, clipping=(processed >= -1.0))
+        self.audio_mixer.set_volume(track_name, 1.0)
+        return processed
 
-    def preview_state(self) -> Dict[str, Any]:
+    def render_scene_preview(self) -> Dict[str, Any]:
+        return self.live_compositor.render_preview()
+
+    def snapshot(self) -> Dict[str, Any]:
         return {
-            "name": self.model.name,
-            "model_type": self.model.model_type,
-            "avatar_name": self.model.avatar_name,
-            "tracking": self.model.tracking,
-            "expression_map": self.model.expression_map,
+            "scene": self.scene.snapshot(),
+            "platform_registry": [p.as_dict() for p in self.platform_registry.list()],
+            "stream_sessions": [s.as_dict() for s in self.stream_manager.list()],
+            "donations": self.donation_connector.snapshot(),
+            "overlays": self.overlay_manager.snapshot(),
+            "audio_levels": self.audio_monitor.snapshot(),
+            "avatar_state": self.avatar_runtime.snapshot(),
+            "devices": self.device_manager.list(),
         }
 
 
-class VTubeSceneSession:
-    """Represents a live scene where one or more VTuber models are active."""
+def main() -> None:
+    runtime = VTUBERuntime()
 
-    def __init__(self, name: str = "default"):
-        self.name = name
-        self.models: Dict[str, VTubeRuntimeAdapter] = {}
+    runtime.register_phone("192.168.1.42", "ABC123", "phone-1")
+    runtime.register_avatar("Luna", model_type="live2d", model_path="models/Luna.model3.json", avatar_name="Luna")
+    runtime.register_scene_source("camera", "webcam", "Camera 1", x=0, y=0, width=1280, height=720, z_index=1)
+    runtime.register_scene_source("avatar", "avatar", "Luna Avatar", x=1100, y=110, width=420, height=620, z_index=10)
+    runtime.register_audio_device("Laptop Mic", "input")
+    runtime.bind_audio_track("Laptop Mic", volume=0.9, source_type="microphone")
+    runtime.register_stream_platform("youtube", "youtube", "rtmp://a.rtmp.youtube.com/live2", "demo-stream-key", channel_name="vtube-demo")
 
-    def add_model(self, model: VTubeModelSpec) -> None:
-        self.models[model.name] = VTubeRuntimeAdapter(model)
-
-    def get_model(self, name: str) -> VTubeRuntimeAdapter:
-        if name not in self.models:
-            raise KeyError(f"Model not loaded in scene: {name}")
-        return self.models[name]
-
-    def export_scene_state(self) -> Dict[str, Any]:
-        return {
-            "scene_name": self.name,
-            "models": {name: adapter.preview_state() for name, adapter in self.models.items()},
-        }
+    face = {"confidence": 0.9, "head_yaw": 0.18, "head_pitch": -0.10, "head_roll": 0.03, "left_eye_open": 0.92, "right_eye_open": 0.93, "mouth_open": 0.42, "smile": 0.71, "blink": 0.1, "eyebrow_raise": 0.15}
+    runtime.process_face(face, source="phone-camera")
+    runtime.process_audio(-18.0, "Laptop Mic")
+    print(runtime.snapshot())
 
 
 if __name__ == "__main__":
-    manager = VTubeModelManager()
-    manager.register(
-        VTubeModelSpec(
-            name="LunaLive2D",
-            model_type="live2d",
-            model_path="models/Luna.model3.json",
-            avatar_name="Luna",
-            tracking={"head_yaw": 0.0, "blink": 0.0},
-            expression_map={"smile": 0.4, "surprised": 0.0},
-        )
-    )
-    print(json.dumps(manager.list_models(), indent=2))
+    main()
