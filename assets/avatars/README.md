@@ -1,169 +1,50 @@
+"""Loader for VRM avatar files and their metadata.
+
+VRM is the most common file format for real VTuber avatar rigs. This module reads
+basic metadata and leaves actual animation/rendering to the eventual real rendering
+backend.
+"""
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-
-from vtube_auth_manager import AuthManager
-from vtube_audio_device import AudioDevice, AudioDeviceManager
-from vtube_audio_mixer import AudioMixer, MixerTrack
-from vtube_audio_monitor import AudioMonitor
-from vtube_avatar_model import AvatarModel, AvatarModelRegistry
-from vtube_avatar_runtime import AvatarRuntime
-from vtube_device_manager import DeviceManager
-from vtube_donation_connector import DonationConnector
-from vtube_encryption import SimpleCipher
-from vtube_expression_mapper import ExpressionMapper
-from vtube_face_tracking import FaceMetrics, FaceTracker
-from vtube_live_compositor import LiveCompositor
-from vtube_motion_tracker import MotionTracker
-from vtube_noise_reduction import NoiseReductionEngine
-from vtube_overlay_platform import OverlayPlatformManager
-from vtube_permission_manager import PermissionManager
-from vtube_phone_bridge import PhoneBridge, PhoneDeviceRegistry
-from vtube_platform_registry import PlatformRegistry
-from vtube_scene import Scene
-from vtube_scene_source import SceneSource
-from vtube_stream_platform import StreamPlatformManager
-from vtube_stream_source import SourceCatalog
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 
 @dataclass
-class VTUBERuntimeConfig:
-    default_scene_name: str = "vtube-main-scene"
-    default_avatar_name: str = "Luna"
-    default_platform: str = "youtube"
-    cipher_secret: str = "vtube-os-secret"
-    default_resolution: Dict[str, int] = field(default_factory=lambda: {"width": 1920, "height": 1080})
+class VRMModel:
+    path: str
+    name: str = ""
+    model_type: str = "vrm"
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    enabled: bool = True
+
+    @property
+    def exists(self) -> bool:
+        return Path(self.path).exists()
+
+    def load(self) -> Dict[str, Any]:
+        if not self.exists:
+            return {"status": "missing", "path": self.path, "model_type": "vrm"}
+
+        payload = json.loads(Path(self.path).read_text(encoding="utf-8"))
+        self.metadata = payload.get("meta", payload)
+        self.name = self.metadata.get("title", Path(self.path).stem)
+        return self.metadata
 
 
-class VTUBERuntime:
-    """Main orchestration layer for VTUBE OS modules across groups A-H."""
+class VRMModelLoader:
+    """Load and validate VRM metadata from a `.vrm` file."""
 
-    def __init__(self, config: Optional[VTUBERuntimeConfig] = None):
-        self.config = config or VTUBERuntimeConfig()
+    def __init__(self, model_path: str | Path):
+        self.model_path = str(model_path)
+        self.model = VRMModel(path=self.model_path)
 
-        self.phone_registry = PhoneDeviceRegistry()
-        self.source_catalog = SourceCatalog()
-        self.device_manager = DeviceManager()
-        self.avatar_registry = AvatarModelRegistry()
-        self.face_tracker = FaceTracker(tracker_name="vtube-runtime")
-        self.avatar_runtime = AvatarRuntime(self.avatar_registry)
-        self.audio_devices = AudioDeviceManager()
-        self.audio_mixer = AudioMixer()
-        self.noise_engine = NoiseReductionEngine()
-        self.audio_monitor = AudioMonitor()
-        self.scene = Scene(self.config.default_scene_name, width=self.config.default_resolution["width"], height=self.config.default_resolution["height"])
-        self.live_compositor = LiveCompositor(self.scene)
-        self.platform_registry = PlatformRegistry()
-        self.stream_manager = StreamPlatformManager()
-        self.donation_connector = DonationConnector()
-        self.overlay_manager = OverlayPlatformManager()
-        self.auth_manager = AuthManager()
-        self.permission_manager = PermissionManager()
-        self.cipher = SimpleCipher(self.config.cipher_secret)
-
-    def register_phone(self, host: str, token: str, name: Optional[str] = None) -> PhoneBridge:
-        bridge = PhoneBridge(host, token)
-        self.phone_registry.register(bridge, name=name)
-        self.device_manager.register(name or bridge.device.host, "phone", True, {"host": host})
-        return bridge
-
-    def register_avatar(self, name: str, model_type: str = "live2d", model_path: str = "", avatar_name: str = "") -> AvatarModel:
-        model = AvatarModel(name=name, model_type=model_type, model_path=model_path, avatar_name=avatar_name or name)
-        self.avatar_registry.register(model)
-        self.avatar_runtime.load_model(name)
-        return model
-
-    def register_scene_source(self, source_id: str, kind: str, name: str, source_url: str = "", x: int = 0, y: int = 0, width: int = 640, height: int = 360, opacity: float = 1.0, z_index: int = 0):
-        source = SceneSource(source_id, kind, name, source_url=source_url, x=x, y=y, width=width, height=height, opacity=opacity, z_index=z_index)
-        self.scene.add_source(source, x=x, y=y, width=width, height=height, opacity=opacity)
-        return source
-
-    def register_multisource_live_scene(
-        self,
-        webcam_device: str = "/dev/video0",
-        phone_host: str = "192.168.1.42",
-        phone_token: str = "ABC123",
-        avatar_name: str = "Luna",
-        avatar_model_path: str = "assets/avatars/Luna/Luna.vrm",
-    ) -> Dict[str, Any]:
-        self.scene = Scene(self.config.default_scene_name, width=self.config.default_resolution["width"], height=self.config.default_resolution["height"])
-
-        webcam = SceneSource("webcam-main", "webcam", "Main Webcam", source_url=webcam_device, x=0, y=0, width=640, height=480, z_index=1)
-        phone_cam = SceneSource("phone-camera-main", "phone-camera", "Phone Camera", source_url=f"http://{phone_host}:8765/camera.mjpeg?token={phone_token}", x=660, y=0, width=640, height=480, z_index=2)
-        phone_screen = SceneSource("phone-screen-main", "phone-screen", "Phone Screen", source_url=f"http://{phone_host}:8765/screen.mjpeg?token={phone_token}", x=0, y=500, width=960, height=540, z_index=3)
-        avatar = SceneSource("avatar-live", "avatar", avatar_name, source_url=avatar_model_path, x=1180, y=60, width=620, height=900, z_index=10, options={"model_type": "vrm", "tracking": True})
-
-        self.scene.add_source(webcam, x=0, y=0, width=640, height=480)
-        self.scene.add_source(phone_cam, x=660, y=0, width=640, height=480)
-        self.scene.add_source(phone_screen, x=0, y=500, width=960, height=540)
-        self.scene.add_source(avatar, x=1180, y=60, width=620, height=900)
-
-        self.device_manager.register("webcam-main", "webcam", True, {"device": webcam_device})
-        self.device_manager.register("phone-camera-main", "phone-camera", True, {"host": phone_host})
-        self.device_manager.register("phone-screen-main", "phone-screen", True, {"host": phone_host})
-        self.device_manager.register("phone-mic-main", "microphone", True, {"host": phone_host})
-
-        return self.scene.snapshot()
-
-    def register_audio_device(self, name: str, kind: str, sample_rate: int = 48000, channels: int = 2) -> AudioDevice:
-        device = AudioDevice(name=name, kind=kind, sample_rate=sample_rate, channels=channels)
-        self.audio_devices.register(device)
-        return device
-
-    def register_stream_platform(self, name: str, kind: str, endpoint: str, stream_key: str, channel_name: str = "") -> Dict[str, Any]:
-        from vtube_platform_registry import PlatformConfig
-        config = PlatformConfig(name=name, kind=kind, endpoint=endpoint, stream_key=stream_key, channel_name=channel_name)
-        self.platform_registry.register(config)
-        self.stream_manager.register(name, stream_key, endpoint, bitrate_kbps=2500, fps=30)
-        return config.as_dict()
-
-    def bind_audio_track(self, name: str, volume: float = 1.0, source_type: str = "microphone") -> MixerTrack:
-        track = MixerTrack(name=name, volume=volume, source_type=source_type)
-        self.audio_mixer.add_track(track)
-        return track
-
-    def process_face(self, frame_data: Optional[Dict[str, Any]] = None, source: str = "camera") -> Dict[str, float]:
-        metrics = self.face_tracker.process_frame(frame_data=frame_data, source=source)
-        return self.avatar_runtime.update_from_tracking(metrics)
-
-    def process_audio(self, input_db: float, track_name: str = "mic") -> float:
-        processed = self.noise_engine.process(input_db)
-        self.audio_monitor.update(track_name, peak_db=processed, rms_db=processed, clipping=(processed >= -1.0))
-        self.audio_mixer.set_volume(track_name, 1.0)
-        return processed
-
-    def render_scene_preview(self) -> Dict[str, Any]:
-        return self.live_compositor.render_preview()
-
-    def snapshot(self) -> Dict[str, Any]:
-        return {
-            "scene": self.scene.snapshot(),
-            "platform_registry": [p.as_dict() for p in self.platform_registry.list()],
-            "stream_sessions": [s.as_dict() for s in self.stream_manager.list()],
-            "donations": self.donation_connector.snapshot(),
-            "overlays": self.overlay_manager.snapshot(),
-            "audio_levels": self.audio_monitor.snapshot(),
-            "avatar_state": self.avatar_runtime.snapshot(),
-            "devices": self.device_manager.list(),
-        }
-
-
-def main() -> None:
-    runtime = VTUBERuntime()
-
-    runtime.register_phone("192.168.1.42", "ABC123", "phone-1")
-    runtime.register_avatar("Luna", model_type="vrm", model_path="assets/avatars/Luna/Luna.vrm", avatar_name="Luna")
-    runtime.register_multisource_live_scene(webcam_device="/dev/video0", phone_host="192.168.1.42", phone_token="ABC123", avatar_name="Luna")
-    runtime.register_audio_device("Laptop Mic", "input")
-    runtime.bind_audio_track("Laptop Mic", volume=0.9, source_type="microphone")
-    runtime.register_stream_platform("youtube", "youtube", "rtmp://a.rtmp.youtube.com/live2", "demo-stream-key", channel_name="vtube-demo")
-
-    face = {"confidence": 0.9, "head_yaw": 0.18, "head_pitch": -0.10, "head_roll": 0.03, "left_eye_open": 0.92, "right_eye_open": 0.93, "mouth_open": 0.42, "smile": 0.71, "blink": 0.1, "eyebrow_raise": 0.15}
-    runtime.process_face(face, source="phone-camera")
-    runtime.process_audio(-18.0, "Laptop Mic")
-    print(runtime.snapshot())
+    def load(self) -> Dict[str, Any]:
+        return self.model.load()
 
 
 if __name__ == "__main__":
-    main()
+    loader = VRMModelLoader("assets/avatars/Luna/Luna.vrm")
+    print(loader.load())

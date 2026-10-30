@@ -1,53 +1,18 @@
-{
-  "version": 1,
-  "defaults": {
-    "active_avatar": "Luna"
-  },
-  "avatars": {
-    "Luna": {
-      "name": "Luna",
-      "model_type": "vrm",
-      "path": "assets/avatars/Luna/Luna.vrm",
-      "avatar_name": "Luna",
-      "enabled": true,
-      "settings": {
-        "base_scale": 1.0,
-        "layout": "left" 
-      },
-      "expression_map": {
-        "smile": 0.4,
-        "blink": 0.0
-      }
-    },
-    "Nova": {
-      "name": "Nova",
-      "model_type": "live2d",
-      "path": "assets/avatars/Nova/Nova.model3.json",
-      "avatar_name": "Nova",
-      "enabled": true,
-      "settings": {
-        "base_scale": 1.02,
-        "layout": "center"
-      },
-      "expression_map": {
-        "smile": 0.35,
-        "blink": 0.0
-      }
-    },
-    "Kiro": {
-      "name": "Kiro",
-      "model_type": "vrm",
-      "path": "assets/avatars/Kiro/Kiro.vrm",
-      "avatar_name": "Kiro",
-      "enabled": true,
-      "settings": {
-        "base_scale": 0.98,
-        "layout": "right"
-      },
-      "expression_map": {
-        "smile": 0.3,
-        "blink": 0.0
-      }
-    }
-  }
-}
+# VTuber Avatar Assets
+
+Place real Live2D or VRM character files in this folder.
+
+Recommended structure:
+
+- assets/avatars/Luna/Luna.vrm
+- assets/avatars/Nova/Nova.model3.json
+- assets/avatars/Kiro/Kiro.vrm
+
+The repo keeps the manifest so the loader can discover avatars without hardcoding
+paths in the runtime.
+
+Use the `manifest.json` file to register each avatar model. The runtime will then
+load it as a Live2D or VRM asset and bind it into the multi-source VTuber scene.
+
+Do not place placeholder SVG images here; use real model files created for VTuber
+production or purchased/commissioned assets.

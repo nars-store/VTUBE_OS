@@ -1,93 +1,74 @@
-"""Avatar asset loader for Live2D/VRM-ready VTuber models.
+"""Real VTuber runtime layer with Live2D/VRM-ready asset loading.
 
-This loader reads the manifest in `assets/avatars/manifest.json` and resolves the
-actual model files used by the VTuber runtime.
+This module supplies the abstraction for the final avatar runtime used by VTUBE OS.
+The actual rendering backend may be Live2D/VRM-specific and should plug into this
+interface.
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from vtube_avatar_loader import AvatarAssetLoader
+from vtube_expression_mapper import FaceMetrics
 
 
 @dataclass
-class AvatarAsset:
-    name: str
+class AvatarRuntimeState:
+    active_avatar: Optional[str] = None
     model_type: str = "vrm"
-    path: str = ""
-    avatar_name: str = ""
-    enabled: bool = True
-    settings: Dict[str, Any] = field(default_factory=dict)
     expression_map: Dict[str, float] = field(default_factory=dict)
-
-    @property
-    def exists(self) -> bool:
-        if not self.path:
-            return False
-        return Path(self.path).exists()
+    rig_state: Dict[str, float] = field(default_factory=dict)
+    source: str = "camera"
 
     def as_dict(self) -> Dict[str, Any]:
         return {
-            "name": self.name,
+            "active_avatar": self.active_avatar,
             "model_type": self.model_type,
-            "path": self.path,
-            "avatar_name": self.avatar_name,
-            "enabled": self.enabled,
-            "settings": self.settings,
             "expression_map": self.expression_map,
+            "rig_state": self.rig_state,
+            "source": self.source,
         }
 
 
-class AvatarAssetLibrary:
-    """Load and resolve avatar assets from the project manifest."""
+class AvatarRuntime:
+    """Asset-aware VTuber runtime for real avatar models."""
 
-    def __init__(self, manifest_path: str | Path = "assets/avatars/manifest.json"):
-        self.manifest_path = Path(manifest_path)
-        self.assets: Dict[str, AvatarAsset] = {}
-        self.load_manifest()
+    def __init__(self, manifest_path: str = "assets/avatars/manifest.json"):
+        self.loader = AvatarAssetLoader(manifest_path)
+        self.state = AvatarRuntimeState()
 
-    def load_manifest(self) -> None:
-        if not self.manifest_path.exists():
-            self.assets = {}
-            return
-        payload = json.loads(self.manifest_path.read_text(encoding="utf-8"))
-        avatars = payload.get("avatars", {})
-        for key, value in avatars.items():
-            name = value.get("name", key)
-            asset = AvatarAsset(
-                name=name,
-                model_type=value.get("model_type", "vrm"),
-                path=value.get("path", ""),
-                avatar_name=value.get("avatar_name", name),
-                enabled=bool(value.get("enabled", True)),
-                settings=value.get("settings", {}),
-                expression_map=value.get("expression_map", {}),
-            )
-            self.assets[name] = asset
+    def load_avatar(self, name: str) -> Dict[str, Any]:
+        asset = self.loader.get(name)
+        self.state.active_avatar = asset.name
+        self.state.model_type = asset.model_type
+        self.state.expression_map = asset.expression_map
+        self.state.rig_state = asset.settings.copy()
+        return asset.as_dict()
 
-    def list_names(self) -> List[str]:
-        return sorted(self.assets.keys())
+    def update_from_tracking(self, metrics: FaceMetrics) -> Dict[str, float]:
+        expression_map = {
+            "smile": max(0.0, min(1.0, metrics.smile)),
+            "blink": max(0.0, min(1.0, metrics.blink)),
+            "mouth_open": max(0.0, min(1.0, metrics.mouth_open)),
+            "head_yaw": metrics.head_yaw,
+            "head_pitch": metrics.head_pitch,
+            "head_roll": metrics.head_roll,
+        }
+        self.state.expression_map = expression_map
+        self.state.rig_state.update({
+            "head_yaw": metrics.head_yaw,
+            "head_pitch": metrics.head_pitch,
+            "head_roll": metrics.head_roll,
+            "source": metrics.source,
+        })
+        return expression_map
 
-    def get(self, name: str) -> AvatarAsset:
-        if name not in self.assets:
-            raise KeyError(f"Avatar asset not found: {name}")
-        return self.assets[name]
-
-    def resolve(self, name: str) -> AvatarAsset:
-        asset = self.get(name)
-        if not asset.exists:
-            return asset
-        return asset
-
-    def snapshot(self) -> List[Dict[str, Any]]:
-        return [asset.as_dict() for asset in self.assets.values()]
-
-
-def load_avatar_library(manifest_path: str | Path = "assets/avatars/manifest.json") -> AvatarAssetLibrary:
-    return AvatarAssetLibrary(manifest_path)
+    def snapshot(self) -> Dict[str, Any]:
+        return self.state.as_dict()
 
 
 if __name__ == "__main__":
-    library = load_avatar_library()
-    print(library.snapshot())
+    runtime = AvatarRuntime()
+    print(runtime.loader.list_names())
+    print(runtime.snapshot())
