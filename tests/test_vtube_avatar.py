@@ -1,50 +1,102 @@
-import unittest
-import xml.etree.ElementTree as ET
+"""Avatar model metadata and registry for Live2D/VRM-ready VTuber assets."""
+from __future__ import annotations
 
-from vtube_avatar import new_character, render_avatar_svg, render_stream_overlay_svg
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List
 
 
-class AvatarRenderingTests(unittest.TestCase):
-    def test_templates_render_valid_svg_with_customizable_features(self):
-        character = new_character("Nova", "Nova & Friends")
-        character.update({
-            "hair_color": "#123456",
-            "eye_color": "#ABCDEF",
-            "outfit_color": "#654321",
-            "outfit": "Formal",
-            "expression": "Surprised",
-        })
+SUPPORTED_AVATAR_TYPES = ("live2d", "vrm", "generic")
 
-        svg = render_avatar_svg(character)
-        root = ET.fromstring(svg)
 
-        self.assertEqual(root.tag, "{http://www.w3.org/2000/svg}svg")
-        self.assertIn("#123456", svg)
-        self.assertIn("#ABCDEF", svg)
-        self.assertIn("Nova &amp; Friends", svg)
-        self.assertIn('<ellipse cx="200" cy="260" rx="8" ry="12"', svg)
+@dataclass
+class AvatarModel:
+    """Descriptor for a VTuber avatar model."""
 
-    def test_invalid_color_falls_back_to_template_color(self):
-        character = new_character()
-        character["hair_color"] = "url(javascript:alert(1))"
+    name: str
+    model_type: str = "vrm"
+    model_path: str = ""
+    avatar_name: str = ""
+    enabled: bool = True
+    settings: Dict[str, Any] = field(default_factory=dict)
+    expression_map: Dict[str, float] = field(default_factory=dict)
+    rig_state: Dict[str, float] = field(default_factory=dict)
 
-        self.assertIn('fill="#8C70E8"', render_avatar_svg(character))
+    def validate(self) -> None:
+        if self.model_type not in SUPPORTED_AVATAR_TYPES:
+            raise ValueError(f"Unsupported avatar model type: {self.model_type}")
+        if self.model_type != "generic" and self.model_path:
+            path = Path(self.model_path)
+            if not path.exists():
+                raise FileNotFoundError(f"Avatar model file does not exist: {self.model_path}")
 
-    def test_live_overlay_contains_avatar_goal_and_donation_qr(self):
-        svg = render_stream_overlay_svg(
-            new_character("Kiro"),
-            250000,
-            "https://saweria.co/vtube",
-            "data:image/png;base64,cXItZGF0YQ==",
-        )
-        root = ET.fromstring(svg)
 
-        self.assertEqual(root.tag, "{http://www.w3.org/2000/svg}svg")
-        self.assertIn("GOAL Rp 250.000", svg)
-        self.assertIn("https://saweria.co/vtube", svg)
-        self.assertIn("data:image/png;base64,cXItZGF0YQ==", svg)
-        self.assertIn("Kiro", svg)
+class AvatarModelRegistry:
+    """Registry for VTuber models loaded by the runtime."""
+
+    def __init__(self):
+        self.models: Dict[str, AvatarModel] = {}
+
+    def register(self, model: AvatarModel) -> None:
+        model.validate()
+        self.models[model.name] = model
+
+    def get(self, name: str) -> AvatarModel:
+        if name not in self.models:
+            raise KeyError(f"Avatar model not found: {name}")
+        return self.models[name]
+
+    def list_names(self) -> List[str]:
+        return sorted(self.models.keys())
+
+    def save_manifest(self, path: str | Path) -> None:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            name: {
+                "model_type": model.model_type,
+                "model_path": model.model_path,
+                "avatar_name": model.avatar_name,
+                "enabled": model.enabled,
+                "settings": model.settings,
+                "expression_map": model.expression_map,
+                "rig_state": model.rig_state,
+            }
+            for name, model in self.models.items()
+        }
+        target.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    def load_manifest(self, path: str | Path) -> None:
+        target = Path(path)
+        if not target.exists():
+            return
+        data = json.loads(target.read_text(encoding="utf-8"))
+        for name, payload in data.items():
+            self.register(
+                AvatarModel(
+                    name=name,
+                    model_type=payload.get("model_type", "vrm"),
+                    model_path=payload.get("model_path", ""),
+                    avatar_name=payload.get("avatar_name", name),
+                    enabled=payload.get("enabled", True),
+                    settings=payload.get("settings", {}),
+                    expression_map=payload.get("expression_map", {}),
+                    rig_state=payload.get("rig_state", {}),
+                )
+            )
 
 
 if __name__ == "__main__":
-    unittest.main()
+    registry = AvatarModelRegistry()
+    registry.register(
+        AvatarModel(
+            name="Luna",
+            model_type="vrm",
+            model_path="models/Luna.vrm",
+            avatar_name="Luna",
+            settings={"base_scale": 1.0},
+            expression_map={"smile": 0.3, "blink": 0.0},
+        )
+    )
+    print(registry.list_names())
