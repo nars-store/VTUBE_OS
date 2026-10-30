@@ -1,166 +1,102 @@
-"""Face-driven VTuber avatar runtime.
-
-This module replaces the old static SVG avatar prototype with a real rig-oriented
-VTuber state model that can be driven by webcam or phone face tracking.
-"""
+"""Multi-source live VTuber setup for webcam, phone camera, phone screen, and phone mic."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional
 
-from vtube_expression_mapper import FaceMetrics
-
-
-DEFAULT_PRESETS = {
-    "Luna": {"head_scale": 1.0, "eye_scale": 1.0, "mouth_scale": 1.0, "style": "idol"},
-    "Nova": {"head_scale": 1.02, "eye_scale": 1.05, "mouth_scale": 1.1, "style": "streamer"},
-    "Kiro": {"head_scale": 0.98, "eye_scale": 0.95, "mouth_scale": 1.15, "style": "cyber"},
-    "Aoi": {"head_scale": 1.05, "eye_scale": 1.08, "mouth_scale": 1.0, "style": "idol"},
-    "Mika": {"head_scale": 1.0, "eye_scale": 1.1, "mouth_scale": 1.2, "style": "magic"},
-    "Yuzu": {"head_scale": 1.05, "eye_scale": 0.98, "mouth_scale": 1.08, "style": "host"},
-}
+from vtube_scene import Scene
+from vtube_scene_source import SceneSource
 
 
 @dataclass
-class AvatarRigState:
-    """Normalized VTuber motion state derived from face metrics."""
+class MultiSourceConfig:
+    webcam_device: str = "/dev/video0"
+    webcam_name: str = "Main Webcam"
+    phone_host: str = "192.168.1.42"
+    phone_token: str = "ABC123"
+    phone_camera_name: str = "Phone Camera"
+    phone_screen_name: str = "Phone Screen"
+    phone_mic_name: str = "Phone Mic"
+    avatar_name: str = "Luna"
+    avatar_model_path: str = "assets/avatars/Luna/Luna.vrm"
+    width: int = 1920
+    height: int = 1080
 
-    head_yaw: float = 0.0
-    head_pitch: float = 0.0
-    head_roll: float = 0.0
-    left_eye_open: float = 1.0
-    right_eye_open: float = 1.0
-    mouth_open: float = 0.0
-    smile: float = 0.0
-    eyebrow_raise: float = 0.0
-    blink: float = 0.0
-    confidence: float = 0.0
-    emotion: str = "neutral"
-    source: str = "camera"
+
+class MultiSourceVTuberRuntime:
+    """Build a scene where webcam, phone camera, phone screen, and mic are all active."""
+
+    def __init__(self, config: Optional[MultiSourceConfig] = None):
+        self.config = config or MultiSourceConfig()
+        self.scene = Scene("multisource-vtube", width=self.config.width, height=self.config.height)
+
+    def build_scene(self) -> Scene:
+        webcam = SceneSource(
+            "webcam-main",
+            "webcam",
+            self.config.webcam_name,
+            source_url=self.config.webcam_device,
+            x=0,
+            y=0,
+            width=640,
+            height=480,
+            z_index=1,
+        )
+        phone_cam = SceneSource(
+            "phone-camera-main",
+            "phone-camera",
+            self.config.phone_camera_name,
+            source_url=f"http://{self.config.phone_host}:8765/camera.mjpeg?token={self.config.phone_token}",
+            x=660,
+            y=0,
+            width=640,
+            height=480,
+            z_index=2,
+        )
+        phone_screen = SceneSource(
+            "phone-screen-main",
+            "phone-screen",
+            self.config.phone_screen_name,
+            source_url=f"http://{self.config.phone_host}:8765/screen.mjpeg?token={self.config.phone_token}",
+            x=0,
+            y=500,
+            width=960,
+            height=540,
+            z_index=3,
+        )
+        avatar = SceneSource(
+            "avatar-live",
+            "avatar",
+            self.config.avatar_name,
+            source_url=self.config.avatar_model_path,
+            x=1180,
+            y=60,
+            width=620,
+            height=900,
+            z_index=10,
+            options={"model_type": "vrm", "tracking": True},
+        )
+
+        self.scene = Scene("multisource-vtube", width=self.config.width, height=self.config.height)
+        self.scene.add_source(webcam, x=0, y=0, width=640, height=480)
+        self.scene.add_source(phone_cam, x=660, y=0, width=640, height=480)
+        self.scene.add_source(phone_screen, x=0, y=500, width=960, height=540)
+        self.scene.add_source(avatar, x=1180, y=60, width=620, height=900)
+        return self.scene
 
     def as_dict(self) -> Dict[str, Any]:
         return {
-            "head_yaw": self.head_yaw,
-            "head_pitch": self.head_pitch,
-            "head_roll": self.head_roll,
-            "left_eye_open": self.left_eye_open,
-            "right_eye_open": self.right_eye_open,
-            "mouth_open": self.mouth_open,
-            "smile": self.smile,
-            "eyebrow_raise": self.eyebrow_raise,
-            "blink": self.blink,
-            "confidence": self.confidence,
-            "emotion": self.emotion,
-            "source": self.source,
+            "config": {
+                "webcam_device": self.config.webcam_device,
+                "phone_host": self.config.phone_host,
+                "phone_token": self.config.phone_token,
+                "avatar_name": self.config.avatar_name,
+            },
+            "scene": self.scene.snapshot(),
         }
 
 
-class FaceDrivenAvatarRig:
-    """Maps webcam/phone face metrics to a live VTuber rig state."""
-
-    def __init__(self, preset_name: str = "Luna", smoothing: float = 0.7):
-        self.preset_name = preset_name if preset_name in DEFAULT_PRESETS else "Luna"
-        self.smoothing = smoothing
-        self.state = AvatarRigState(source="camera")
-        self.last_metrics: Optional[FaceMetrics] = None
-
-    def update(self, metrics: FaceMetrics) -> AvatarRigState:
-        if self.last_metrics is None:
-            self.last_metrics = metrics
-
-        current = self.state
-        target = AvatarRigState(
-            head_yaw=self._mix(metrics.head_yaw, self.last_metrics.head_yaw, 0.6),
-            head_pitch=self._mix(metrics.head_pitch, self.last_metrics.head_pitch, 0.6),
-            head_roll=self._mix(metrics.head_roll, self.last_metrics.head_roll, 0.6),
-            left_eye_open=max(0.0, min(1.0, metrics.left_eye_open)),
-            right_eye_open=max(0.0, min(1.0, metrics.right_eye_open)),
-            mouth_open=max(0.0, min(1.0, metrics.mouth_open)),
-            smile=max(0.0, min(1.0, metrics.smile)),
-            eyebrow_raise=max(0.0, min(1.0, metrics.eyebrow_raise)),
-            blink=max(0.0, min(1.0, metrics.blink)),
-            confidence=max(0.0, min(1.0, metrics.confidence)),
-            source=metrics.source,
-        )
-
-        if target.mouth_open > 0.65:
-            target.emotion = "talking"
-        elif target.smile > 0.7:
-            target.emotion = "happy"
-        elif target.eyebrow_raise > 0.5:
-            target.emotion = "surprised"
-        elif target.blink > 0.6:
-            target.emotion = "blink"
-        else:
-            target.emotion = "neutral"
-
-        current.head_yaw = self._smooth(current.head_yaw, target.head_yaw)
-        current.head_pitch = self._smooth(current.head_pitch, target.head_pitch)
-        current.head_roll = self._smooth(current.head_roll, target.head_roll)
-        current.left_eye_open = self._smooth(current.left_eye_open, target.left_eye_open)
-        current.right_eye_open = self._smooth(current.right_eye_open, target.right_eye_open)
-        current.mouth_open = self._smooth(current.mouth_open, target.mouth_open)
-        current.smile = self._smooth(current.smile, target.smile)
-        current.eyebrow_raise = self._smooth(current.eyebrow_raise, target.eyebrow_raise)
-        current.blink = self._smooth(current.blink, target.blink)
-        current.confidence = self._smooth(current.confidence, target.confidence)
-        current.emotion = target.emotion
-        current.source = metrics.source
-
-        self.last_metrics = metrics
-        return self.state
-
-    def _mix(self, current: float, previous: float, weight: float) -> float:
-        return previous * (1.0 - weight) + current * weight
-
-    def _smooth(self, previous: float, target: float) -> float:
-        return previous * (1.0 - self.smoothing) + target * self.smoothing
-
-    def as_dict(self) -> Dict[str, Any]:
-        return self.state.as_dict()
-
-
-def list_templates() -> List[str]:
-    return list(DEFAULT_PRESETS.keys())
-
-
-def new_character(template: str = "Luna", name: Optional[str] = None) -> Dict[str, Any]:
-    template_name = template if template in DEFAULT_PRESETS else "Luna"
-    return {
-        "name": name or template_name,
-        "template": template_name,
-        "model_type": "vrm",
-        "preset": DEFAULT_PRESETS[template_name],
-        "tracking": {"enabled": True},
-    }
-
-
-def render_avatar_svg(character: Dict[str, Any]) -> str:
-    raise RuntimeError(
-        "SVG avatar rendering is no longer used. This project now uses a face-driven VTuber rig. "
-        "Use FaceDrivenAvatarRig + FaceTracker to drive a Live2D/VRM model instead."
-    )
-
-
-def render_stream_overlay_svg(character: Dict[str, Any], goal: float, donation_link: str = "", qr_data_uri: str = "") -> str:
-    raise RuntimeError(
-        "Static stream overlay SVG is deprecated. Use the real-time VTuber runtime pipeline driven by live face tracking."
-    )
-
-
 if __name__ == "__main__":
-    rig = FaceDrivenAvatarRig("Aoi")
-    sample = FaceMetrics(
-        confidence=0.92,
-        head_yaw=0.22,
-        head_pitch=-0.1,
-        head_roll=0.03,
-        left_eye_open=0.9,
-        right_eye_open=0.92,
-        mouth_open=0.58,
-        smile=0.72,
-        eyebrow_raise=0.18,
-        blink=0.08,
-        source="webcam",
-    )
-    print(rig.update(sample).as_dict())
+    runtime = MultiSourceVTuberRuntime()
+    scene = runtime.build_scene()
+    print(scene.snapshot())
