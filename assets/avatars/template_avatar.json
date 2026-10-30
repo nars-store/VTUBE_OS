@@ -1,0 +1,48 @@
+{
+  "name": "Original VTuber Template",
+  "style": "idol",
+  "author": "Original Creator",
+  "license": "use original or licensed model assets only",
+  "palette": {
+    "skin": "#F4D0B8",
+    "hair": "#6B4F9A",
+    "eye": "#4C7CFF",
+    "outfit_primary": "#8B5CF6",
+    "outfit_secondary": "#E2D8FF",
+    "accent": "#F8B4D9"
+  },
+  "clothing": {
+    "top": "idol_uniform",
+    "bottom": "skirt",
+    "outerwear": "jacket",
+    "style": "cute_streamer"
+  },
+  "features": {
+    "eye_shape": "large_round",
+    "bangs": "soft_side",
+    "hair_length": "mid_long",
+    "expression_default": "smile",
+    "pose": "idle"
+  },
+  "customizable": [
+    "hair_color",
+    "eye_color",
+    "skin_tone",
+    "outfit_primary",
+    "outfit_secondary",
+    "accent_color",
+    "expression",
+    "pose",
+    "clothing_style"
+  ],
+  "rig": {
+    "head_yaw": 0.0,
+    "head_pitch": 0.0,
+    "head_roll": 0.0,
+    "blink": 0.0,
+    "smile": 0.0,
+    "mouth_open": 0.0,
+    "eyebrow_raise": 0.0
+  },
+  "notes": "This is an original template. Replace or supplement with your own Live2D/VRM model assets and licensed art."
+}
