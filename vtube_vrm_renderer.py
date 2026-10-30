@@ -1,7 +1,8 @@
 """Live2D renderer adapter for VTUBE OS.
 
-This is a bridge layer for a real Live2D runtime. The project keeps the logic as a
-runtime-facing adapter so a real Live2D Web SDK or native client can plug in.
+This file is the bridge between the VTUBE OS scene and a real Live2D renderer,
+for example the Cubism Web SDK or a native app/runtime that supports .model3.json.
+The runtime here intentionally keeps the engine interface separate from the app logic.
 """
 from __future__ import annotations
 
@@ -25,6 +26,7 @@ class Live2DRenderAsset:
     def load(self) -> Dict[str, Any]:
         if not self.exists:
             return {"status": "missing", "path": self.path, "model_type": "live2d"}
+
         payload = json.loads(Path(self.path).read_text(encoding="utf-8"))
         self.model_name = payload.get("FileReferences", {}).get("Moc", Path(self.path).stem)
         self.metadata = payload
@@ -32,7 +34,7 @@ class Live2DRenderAsset:
 
 
 class Live2DRenderer:
-    """Renderer adapter. Use with Live2D Cubism Web SDK / native runtime."""
+    """Adapter for a real Live2D runtime backend."""
 
     def __init__(self, model_path: str = "assets/avatars/Nova/Nova.model3.json"):
         self.asset = Live2DRenderAsset(path=model_path)

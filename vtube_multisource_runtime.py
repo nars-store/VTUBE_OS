@@ -1,74 +1,56 @@
-"""Real VTuber runtime layer with Live2D/VRM-ready asset loading.
+"""VRM renderer adapter for VTUBE OS.
 
-This module supplies the abstraction for the final avatar runtime used by VTUBE OS.
-The actual rendering backend may be Live2D/VRM-specific and should plug into this
-interface.
+This file is the bridge between the VTUBE OS scene and a real VRM runtime, such as
+Three.js + @pixiv/three-vrm or a native VRM-capable engine. The project keeps the
+runtime contract stable while allowing different visual backends.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-
-from vtube_avatar_loader import AvatarAssetLoader
-from vtube_expression_mapper import FaceMetrics
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 
 @dataclass
-class AvatarRuntimeState:
-    active_avatar: Optional[str] = None
-    model_type: str = "vrm"
-    expression_map: Dict[str, float] = field(default_factory=dict)
-    rig_state: Dict[str, float] = field(default_factory=dict)
-    source: str = "camera"
+class VRMRenderAsset:
+    path: str
+    model_name: str = ""
+    enabled: bool = True
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def as_dict(self) -> Dict[str, Any]:
+    @property
+    def exists(self) -> bool:
+        return Path(self.path).exists()
+
+    def load(self) -> Dict[str, Any]:
+        if not self.exists:
+            return {"status": "missing", "path": self.path, "model_type": "vrm"}
+
+        payload = json.loads(Path(self.path).read_text(encoding="utf-8"))
+        self.metadata = payload.get("meta", payload)
+        self.model_name = self.metadata.get("title", Path(self.path).stem)
+        return self.metadata
+
+
+class VRMRenderer:
+    """Adapter for a real VRM rendering backend."""
+
+    def __init__(self, model_path: str = "assets/avatars/Luna/Luna.vrm"):
+        self.asset = VRMRenderAsset(path=model_path)
+
+    def load(self) -> Dict[str, Any]:
+        return self.asset.load()
+
+    def preview(self) -> Dict[str, Any]:
         return {
-            "active_avatar": self.active_avatar,
-            "model_type": self.model_type,
-            "expression_map": self.expression_map,
-            "rig_state": self.rig_state,
-            "source": self.source,
+            "model_type": "vrm",
+            "path": self.asset.path,
+            "model_name": self.asset.model_name,
+            "status": "ready" if self.asset.exists else "missing",
         }
-
-
-class AvatarRuntime:
-    """Asset-aware VTuber runtime for real avatar models."""
-
-    def __init__(self, manifest_path: str = "assets/avatars/manifest.json"):
-        self.loader = AvatarAssetLoader(manifest_path)
-        self.state = AvatarRuntimeState()
-
-    def load_avatar(self, name: str) -> Dict[str, Any]:
-        asset = self.loader.get(name)
-        self.state.active_avatar = asset.name
-        self.state.model_type = asset.model_type
-        self.state.expression_map = asset.expression_map
-        self.state.rig_state = asset.settings.copy()
-        return asset.as_dict()
-
-    def update_from_tracking(self, metrics: FaceMetrics) -> Dict[str, float]:
-        expression_map = {
-            "smile": max(0.0, min(1.0, metrics.smile)),
-            "blink": max(0.0, min(1.0, metrics.blink)),
-            "mouth_open": max(0.0, min(1.0, metrics.mouth_open)),
-            "head_yaw": metrics.head_yaw,
-            "head_pitch": metrics.head_pitch,
-            "head_roll": metrics.head_roll,
-        }
-        self.state.expression_map = expression_map
-        self.state.rig_state.update({
-            "head_yaw": metrics.head_yaw,
-            "head_pitch": metrics.head_pitch,
-            "head_roll": metrics.head_roll,
-            "source": metrics.source,
-        })
-        return expression_map
-
-    def snapshot(self) -> Dict[str, Any]:
-        return self.state.as_dict()
 
 
 if __name__ == "__main__":
-    runtime = AvatarRuntime()
-    print(runtime.loader.list_names())
-    print(runtime.snapshot())
+    renderer = VRMRenderer()
+    print(renderer.preview())

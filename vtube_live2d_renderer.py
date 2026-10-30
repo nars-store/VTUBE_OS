@@ -1,8 +1,9 @@
-"""Avatar editor for original VTuber character customization.
+"""VTuber original-character customization system.
 
-This module is a safe, template-driven system for creating an original VTuber look
-without deriving from a copyrighted character's exact silhouette or identity.
-It is designed to work with real Live2D/VRM model assets while preserving rigging.
+This editor intentionally works with template-driven customization so creators can
+build an original VTuber look without copying another artist's exact design.
+It keeps the avatar rig structure intact while allowing color, outfit, accessory,
+and expression changes to be exported as a reusable config.
 """
 from __future__ import annotations
 
@@ -63,7 +64,7 @@ class AvatarCustomization:
 
 
 class AvatarTemplateEditor:
-    """Edit a VTuber template while preserving the original rig."""
+    """Edit a VTuber template while retaining the same rig structure."""
 
     def __init__(self, template_path: str | Path = DEFAULT_TEMPLATE_PATH):
         self.template_path = Path(template_path)

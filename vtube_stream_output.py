@@ -1,55 +1,106 @@
-"""VRM renderer adapter for VTUBE OS.
+"""Multi-source VTuber scene runtime.
 
-This is a bridge layer for a real VRM runtime. The code keeps metadata loading and
-runtime state validation separate from the actual 3D engine that may run in the
-browser or a desktop runtime.
+This orchestration layer composes multiple sources into a single scene that can be
+used for final streaming. The avatar itself is not rendered here; instead this layer
+coordinates the layout and stream pipeline around a real renderer backend.
 """
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
+
+from vtube_scene import Scene
+from vtube_scene_source import SceneSource
 
 
 @dataclass
-class VRMRenderAsset:
-    path: str
-    model_name: str = ""
-    enabled: bool = True
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def exists(self) -> bool:
-        return Path(self.path).exists()
-
-    def load(self) -> Dict[str, Any]:
-        if not self.exists:
-            return {"status": "missing", "path": self.path, "model_type": "vrm"}
-        payload = json.loads(Path(self.path).read_text(encoding="utf-8"))
-        self.metadata = payload.get("meta", payload)
-        self.model_name = self.metadata.get("title", Path(self.path).stem)
-        return self.metadata
+class MultiSourceConfig:
+    webcam_device: str = "/dev/video0"
+    webcam_name: str = "Main Webcam"
+    phone_host: str = "192.168.1.42"
+    phone_token: str = "ABC123"
+    phone_camera_name: str = "Phone Camera"
+    phone_screen_name: str = "Phone Screen"
+    phone_mic_name: str = "Phone Mic"
+    avatar_name: str = "Luna"
+    avatar_model_path: str = "assets/avatars/Luna/Luna.vrm"
+    width: int = 1920
+    height: int = 1080
 
 
-class VRMRenderer:
-    """Renderer adapter. Use with Three.js + @pixiv/three-vrm or other VRM engine."""
+class MultiSourceVTuberRuntime:
+    """Compose webcam, phone source, screen share, and avatar in one scene."""
 
-    def __init__(self, model_path: str = "assets/avatars/Luna/Luna.vrm"):
-        self.asset = VRMRenderAsset(path=model_path)
+    def __init__(self, config: Optional[MultiSourceConfig] = None):
+        self.config = config or MultiSourceConfig()
+        self.scene = Scene("multisource-vtube", width=self.config.width, height=self.config.height)
 
-    def load(self) -> Dict[str, Any]:
-        return self.asset.load()
+    def build_scene(self) -> Scene:
+        webcam = SceneSource(
+            "webcam-main",
+            "webcam",
+            self.config.webcam_name,
+            source_url=self.config.webcam_device,
+            x=0,
+            y=0,
+            width=640,
+            height=480,
+            z_index=1,
+        )
+        phone_camera = SceneSource(
+            "phone-camera-main",
+            "phone-camera",
+            self.config.phone_camera_name,
+            source_url=f"http://{self.config.phone_host}:8765/camera.mjpeg?token={self.config.phone_token}",
+            x=660,
+            y=0,
+            width=640,
+            height=480,
+            z_index=2,
+        )
+        phone_screen = SceneSource(
+            "phone-screen-main",
+            "phone-screen",
+            self.config.phone_screen_name,
+            source_url=f"http://{self.config.phone_host}:8765/screen.mjpeg?token={self.config.phone_token}",
+            x=0,
+            y=500,
+            width=960,
+            height=540,
+            z_index=3,
+        )
+        avatar = SceneSource(
+            "avatar-live",
+            "avatar",
+            self.config.avatar_name,
+            source_url=self.config.avatar_model_path,
+            x=1180,
+            y=60,
+            width=620,
+            height=900,
+            z_index=10,
+            options={"model_type": "vrm", "tracking": True},
+        )
 
-    def preview(self) -> Dict[str, Any]:
+        self.scene = Scene("multisource-vtube", width=self.config.width, height=self.config.height)
+        self.scene.add_source(webcam, x=0, y=0, width=640, height=480)
+        self.scene.add_source(phone_camera, x=660, y=0, width=640, height=480)
+        self.scene.add_source(phone_screen, x=0, y=500, width=960, height=540)
+        self.scene.add_source(avatar, x=1180, y=60, width=620, height=900)
+        return self.scene
+
+    def as_dict(self) -> Dict[str, Any]:
         return {
-            "model_type": "vrm",
-            "path": self.asset.path,
-            "model_name": self.asset.model_name,
-            "status": "ready" if self.asset.exists else "missing",
+            "config": {
+                "webcam_device": self.config.webcam_device,
+                "phone_host": self.config.phone_host,
+                "phone_token": self.config.phone_token,
+                "avatar_name": self.config.avatar_name,
+            },
+            "scene": self.scene.snapshot(),
         }
 
 
 if __name__ == "__main__":
-    renderer = VRMRenderer()
-    print(renderer.preview())
+    runtime = MultiSourceVTuberRuntime()
+    print(runtime.build_scene().snapshot())
